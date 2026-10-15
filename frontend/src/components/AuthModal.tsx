@@ -1,18 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface Props {
   onClose: () => void;
+  initialError?: string;
 }
 
-export default function AuthModal({ onClose }: Props) {
+export default function AuthModal({ onClose, initialError }: Props) {
   const { signin, signup } = useAuth();
   const [tab, setTab] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(initialError || '');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (initialError) {
+      setError(initialError);
+    }
+  }, [initialError]);
+
+  const handleTabChange = (nextTab: 'signin' | 'signup') => {
+    setTab(nextTab);
+    setError('');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,7 +38,8 @@ export default function AuthModal({ onClose }: Props) {
       }
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      const msg = err instanceof Error ? err.message : 'Something went wrong';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -39,6 +52,26 @@ export default function AuthModal({ onClose }: Props) {
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" style={{ position: 'relative' }}>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          style={{
+            position: 'absolute',
+            top: 14,
+            right: 14,
+            background: 'none',
+            border: 'none',
+            color: 'var(--text-muted, #888)',
+            fontSize: 22,
+            lineHeight: 1,
+            cursor: 'pointer',
+            padding: '4px 8px',
+          }}
+        >
+          ×
+        </button>
+
         {/* Logo */}
         <div className="modal-logo">
           <div className="modal-logo-icon">G</div>
@@ -50,8 +83,20 @@ export default function AuthModal({ onClose }: Props) {
 
         {/* Tabs */}
         <div className="modal-tabs">
-          <button className={`modal-tab ${tab === 'signin' ? 'active' : ''}`} onClick={() => setTab('signin')}>Sign In</button>
-          <button className={`modal-tab ${tab === 'signup' ? 'active' : ''}`} onClick={() => setTab('signup')}>Sign Up</button>
+          <button
+            className={`modal-tab ${tab === 'signin' ? 'active' : ''}`}
+            onClick={() => handleTabChange('signin')}
+            type="button"
+          >
+            Sign In
+          </button>
+          <button
+            className={`modal-tab ${tab === 'signup' ? 'active' : ''}`}
+            onClick={() => handleTabChange('signup')}
+            type="button"
+          >
+            Sign Up
+          </button>
         </div>
 
         {/* Google OAuth */}
@@ -104,9 +149,21 @@ export default function AuthModal({ onClose }: Props) {
               onChange={e => setPassword(e.target.value)}
             />
           </div>
-          {error && <div className="form-error">{error}</div>}
+          {error && (
+            <div className="form-error" role="alert">
+              <span className="form-error-icon">⚠</span>
+              {error}
+            </div>
+          )}
           <button className="btn-primary" type="submit" disabled={loading}>
-            {loading ? 'Please wait…' : tab === 'signin' ? 'Sign In' : 'Create Account'}
+            {loading ? (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <span className="spinner" />
+                Please wait…
+              </span>
+            ) : (
+              tab === 'signin' ? 'Sign In' : 'Create Account'
+            )}
           </button>
         </form>
       </div>

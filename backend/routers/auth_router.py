@@ -107,18 +107,39 @@ async def google_login(request: Request):
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="Google OAuth is not configured on this server.",
         )
+    from urllib.parse import urlparse
+    parsed_redirect = urlparse(GOOGLE_REDIRECT_URI)
+    redirect_netloc = parsed_redirect.netloc
+    current_netloc = request.headers.get("host") or request.url.netloc
+
+    # Ensure /auth/google runs on the same domain as GOOGLE_REDIRECT_URI
+    # so the session cookie matches the domain on the callback
+    if redirect_netloc and current_netloc and current_netloc != redirect_netloc:
+        target_url = f"{parsed_redirect.scheme or 'http'}://{redirect_netloc}/auth/google"
+        return RedirectResponse(url=target_url)
+
     redirect_uri = GOOGLE_REDIRECT_URI
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 
 @router.get("/google/callback")
 async def google_callback(request: Request, db: Session = Depends(get_db)):
+    target_frontend = FRONTEND_URL
+    if request.url.hostname == "localhost" and "127.0.0.1" in target_frontend:
+        target_frontend = target_frontend.replace("127.0.0.1", "localhost")
+    elif request.url.hostname == "127.0.0.1" and "localhost" in target_frontend:
+        target_frontend = target_frontend.replace("localhost", "127.0.0.1")
+
     try:
         token_data = await oauth.google.authorize_access_token(request)
     except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Google OAuth failed: {exc}",
+        err_msg = str(exc)
+        # Give the user a human-readable hint for the most common errors
+        if "mismatching_state" in err_msg or "CSRF" in err_msg:
+            err_msg = "OAuth session expired or was used twice. Please try signing in again."
+        from urllib.parse import quote
+        return RedirectResponse(
+            url=f"{target_frontend}/?auth_error={quote(err_msg)}"
         )
 
     user_info = token_data.get("userinfo") or {}
@@ -127,9 +148,9 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
     provider_id: str = user_info.get("sub", "")
 
     if not email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not retrieve email from Google.",
+        from urllib.parse import quote
+        return RedirectResponse(
+            url=f"{target_frontend}/?auth_error={quote('Could not retrieve email from Google.')}"
         )
 
     # Upsert user
@@ -155,7 +176,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
     jwt_token = create_access_token({"sub": user.id, "email": user.email})
     # Redirect back to frontend with the token in the URL fragment
     return RedirectResponse(
-        url=f"{FRONTEND_URL}/auth/callback#token={jwt_token}"
+        url=f"{target_frontend}/auth/callback#token={jwt_token}"
     )
 
 

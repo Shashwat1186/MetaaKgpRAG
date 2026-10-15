@@ -43,7 +43,13 @@ def chat(
 
     # ── Guest mode ────────────────────────────────────────────────────────────
     if user_id is None:
-        answer = rag_service.chat(body.message, history=[])
+        try:
+            answer = rag_service.chat(body.message, history=[])
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=str(exc),
+            )
         return schemas.ChatResponse(answer=answer, conversation_id="guest")
 
     # ── Authenticated mode ────────────────────────────────────────────────────
@@ -81,7 +87,14 @@ def chat(
     history = _build_history(prior_messages)
 
     # 3. Run RAG agent
-    answer = rag_service.chat(body.message, history=history)
+    try:
+        answer = rag_service.chat(body.message, history=history)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        )
+
 
     # 4. Persist user message + assistant reply
     db.add(models.Message(

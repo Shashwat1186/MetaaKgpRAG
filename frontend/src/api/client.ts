@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const BASE_URL = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' ? 'http://127.0.0.1:8000' : 'http://localhost:8000');
 
 function getToken(): string | null {
   return localStorage.getItem('gm_token');
@@ -12,11 +12,28 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || 'Request failed');
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  } catch (networkErr) {
+    // fetch() itself threw — server is unreachable
+    throw new Error(
+      'Cannot reach the server. Make sure the backend is running on ' + BASE_URL
+    );
   }
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: res.statusText }));
+    // FastAPI validation errors come as { detail: [{msg, loc, type}] }
+    let message: string;
+    if (Array.isArray(body.detail)) {
+      message = body.detail.map((d: { msg: string }) => d.msg).join(', ');
+    } else {
+      message = body.detail || `Request failed (${res.status})`;
+    }
+    throw new Error(message);
+  }
+
   if (res.status === 204) return undefined as T;
   return res.json();
 }

@@ -14,7 +14,7 @@ import networkx as nx
 
 CHROMA_DB_DIR = Path('data/chroma_db')
 GRAPH_PATH = Path('data/metakgp_graph.gpickle')
-COLLECTION_NAME = 'metakgp_wiki'
+COLLECTION_NAME = 'metakgp_pages'   # must match scraper/indexer.py
 EMBEDDING_MODEL = 'all-MiniLM-L6-v2'
 
 
@@ -25,11 +25,19 @@ class GraphRAGRetriever:
         
         print(f"[Retriever] Connecting to ChromaDB...")
         self.client = chromadb.PersistentClient(path=str(CHROMA_DB_DIR))
-        self.collection = self.client.get_collection(name=COLLECTION_NAME)
+        # Use get_or_create so the server starts even before data is ingested
+        self.collection = self.client.get_or_create_collection(
+            name=COLLECTION_NAME,
+            metadata={"hnsw:space": "cosine"},
+        )
         
         print(f"[Retriever] Loading Knowledge Graph...")
-        with open(GRAPH_PATH, 'rb') as f:
-            self.graph = pickle.load(f)
+        if GRAPH_PATH.exists():
+            with open(GRAPH_PATH, 'rb') as f:
+                self.graph = pickle.load(f)
+        else:
+            print(f"[Retriever] WARNING: {GRAPH_PATH} not found. Graph expansion disabled.")
+            self.graph = None
 
     def search(self, query: str, top_k: int = 3, expand_graph: bool = True):
         print(f"\n[Retriever] Query: '{query}'")
@@ -62,6 +70,9 @@ class GraphRAGRetriever:
             return
 
         # 2. Graph Expansion
+        if self.graph is None:
+            print("[Retriever] Graph not available — skipping expansion.")
+            return
         print("\n--- [Phase 2] Graph Expansion Neighbors ---")
         expanded_urls = set()
         
@@ -90,6 +101,13 @@ class GraphRAGRetriever:
 
     def search_for_agent(self, query: str, top_k: int = 3) -> str:
         """Helper function for the LangChain agent. Returns formatted context."""
+        if self.collection.count() == 0:
+            return (
+                "The knowledge base is currently empty. "
+                "Please run the data pipeline first: "
+                "scrape → ingest → index."
+            )
+
         query_embedding = self.model.encode(query).tolist()
         results = self.collection.query(
             query_embeddings=[query_embedding],
@@ -100,16 +118,39 @@ class GraphRAGRetriever:
         if not results['ids'][0]:
             return "No results found."
 
+        # Graph expansion: fetch additional context from linked pages
         context = []
+        seen_urls: set[str] = set()
         for i in range(len(results['ids'][0])):
             metadata = results['metadatas'][0][i]
             document = results['documents'][0][i]
             title = metadata.get('title', 'Unknown')
             url = metadata.get('url', 'Unknown')
-            
+            seen_urls.add(url)
             chunk_text = f"Source: {title} ({url})\nContent: {document}\n"
             context.append(chunk_text)
-            
+
+        # Graph expansion
+        if self.graph is not None:
+            expanded_docs: list[str] = []
+            for url in list(seen_urls):
+                if not self.graph.has_node(url):
+                    continue
+                neighbors = (
+                    list(self.graph.successors(url))
+                    + list(self.graph.predecessors(url))
+                )
+                for neighbor in neighbors[:3]:   # cap to 3 per node
+                    if neighbor in seen_urls:
+                        continue
+                    if self.graph.nodes[neighbor].get('type') == 'category':
+                        continue
+                    seen_urls.add(neighbor)
+                    neighbor_title = self.graph.nodes[neighbor].get('title', neighbor)
+                    expanded_docs.append(f"Related page: {neighbor_title} ({neighbor})")
+            if expanded_docs:
+                context.append("\n".join(expanded_docs))
+
         return "\n---\n".join(context)
 
 

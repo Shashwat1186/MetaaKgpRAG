@@ -16,7 +16,7 @@ from sentence_transformers import SentenceTransformer
 
 PROCESSED_DIR = Path('data/processed')
 CHROMA_DB_DIR = Path('data/chroma_db')
-COLLECTION_NAME = 'metakgp_wiki'
+COLLECTION_NAME = 'metakgp_pages'
 EMBEDDING_MODEL = 'all-MiniLM-L6-v2'
 
 

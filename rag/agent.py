@@ -25,14 +25,20 @@ from rag.retriever import GraphRAGRetriever
 # Load environment variables (e.g., GOOGLE_API_KEY)
 load_dotenv()
 
-print("Initializing GraphRAG Retriever...")
-retriever = GraphRAGRetriever()
+_retriever = None
+
+def _get_retriever():
+    global _retriever
+    if _retriever is None:
+        print("Initializing GraphRAG Retriever...")
+        _retriever = GraphRAGRetriever()
+    return _retriever
 
 @tool
 def search_knowledge_base(query: str) -> str:
     """Useful for when you need to answer questions about MetaKGP, IIT Kharagpur, halls, courses, and related entities. 
     Input should be a specific search query. You can call this tool multiple times to gather all necessary information."""
-    return retriever.search_for_agent(query, top_k=10)
+    return _get_retriever().search_for_agent(query, top_k=10)
 
 class MoEVerification(BaseModel):
     source_matcher_passed: bool = Field(description="Does the text in the retrieved chunk actually support this claim? True if yes.")
@@ -62,13 +68,15 @@ def run_moe_verification(llm, query: str, context: str, draft_answer: str) -> Mo
     return verifier_llm.invoke(prompt)
 
 def get_llm():
-    api_key = os.getenv("GOOGLE_API_KEY")
+    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not api_key:
-        print("Error: GOOGLE_API_KEY environment variable not found. Please add it to your .env file.")
+        print("Error: GOOGLE_API_KEY or GEMINI_API_KEY environment variable not found. Please add it to your .env file.")
         exit(1)
-        
+
+    model_name = os.getenv("LLM_MODEL", "gemini-3.8-flash")
+
     return ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=model_name,
         temperature=0.0,
         google_api_key=api_key
     )

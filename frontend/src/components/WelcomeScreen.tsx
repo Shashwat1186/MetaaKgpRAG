@@ -7,9 +7,9 @@ const SUGGESTIONS = [
   },
   {
     icon: '📋',
-    title: 'DepC & Branch Change',
-    tag: 'ACADEMIC',
-    body: 'What were last year\'s CGPA cutoffs and senate rules for branch change to CSE?',
+    title: 'CDC Placements Tips',
+    tag: 'CAREER',
+    body: 'What are the most important preparation tips and strategies for CDC placements?',
   },
   {
     icon: '💼',

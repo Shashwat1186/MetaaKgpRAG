@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect } from 'react';
 import type { KeyboardEvent } from 'react';
 
 const MAX_CHARS = 2048;
@@ -9,13 +9,20 @@ const IconSend = () => (
   </svg>
 );
 
+const IconChevronDown = () => (
+  <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
 interface Props {
+  value: string;
+  onChange: (value: string) => void;
   onSend: (text: string) => void;
   disabled?: boolean;
 }
 
-export default function MessageInput({ onSend, disabled }: Props) {
-  const [value, setValue] = useState('');
+export default function MessageInput({ value, onChange, onSend, disabled }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea
@@ -30,7 +37,7 @@ export default function MessageInput({ onSend, disabled }: Props) {
     const msg = value.trim();
     if (!msg || disabled) return;
     onSend(msg);
-    setValue('');
+    onChange('');
   };
 
   const handleKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -40,8 +47,6 @@ export default function MessageInput({ onSend, disabled }: Props) {
     }
   };
 
-  const remaining = MAX_CHARS - value.length;
-
   return (
     <div className="input-area">
       <div className="input-inner">
@@ -49,7 +54,7 @@ export default function MessageInput({ onSend, disabled }: Props) {
           <textarea
             ref={textareaRef}
             value={value}
-            onChange={e => setValue(e.target.value.slice(0, MAX_CHARS))}
+            onChange={e => onChange(e.target.value.slice(0, MAX_CHARS))}
             onKeyDown={handleKey}
             placeholder="Message GraphMind AI or ask about KGP wiki…"
             rows={1}
@@ -57,19 +62,24 @@ export default function MessageInput({ onSend, disabled }: Props) {
           />
           <div className="input-actions">
             <div className="input-left">
-              <div className="input-pill">
+              <button className="input-pill toggle" aria-pressed="true" aria-label="Toggle MetaKGP Wiki source">
                 <div className="input-pill-dot" />
                 MetaKGP Wiki: On
-              </div>
-              <div className="input-pill"># All Campuses</div>
+                <IconChevronDown />
+              </button>
+              <button className="input-pill toggle" aria-haspopup="listbox" aria-expanded="false" aria-label="Select Campus">
+                # All Campuses
+                <IconChevronDown />
+              </button>
             </div>
             <div className="input-right">
-              <span className="char-count">{remaining} / {MAX_CHARS}</span>
+              <span className="char-count">{value.length} / {MAX_CHARS}</span>
               <button
                 className="send-btn"
                 onClick={handleSend}
                 disabled={!value.trim() || disabled}
                 title="Send (Enter)"
+                aria-label="Send message"
               >
                 <IconSend />
               </button>

@@ -15,12 +15,18 @@ const IconSearch = () => (
   </svg>
 );
 
+const IconMenu = () => (
+  <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+    <path d="M3 12h18M3 6h18M3 18h18" strokeLinecap="round"/>
+  </svg>
+);
+
 function genId() {
   return Math.random().toString(36).slice(2);
 }
 
 export default function App() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, setTokenFromCallback } = useAuth();
 
   // ── State ────────────────────────────────────────────────────────────────
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -28,8 +34,42 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isThinking, setIsThinking] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [inputValue, setInputValue] = useState('');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // ── Handle Google OAuth redirect: picks up #token=... or ?auth_error=... ────
+  useEffect(() => {
+    // Success: backend set #token=<jwt> on the redirect
+    const hash = window.location.hash;
+    if (hash.startsWith('#token=')) {
+      const token = hash.slice('#token='.length);
+      if (token) {
+        setTokenFromCallback(token)
+          .then(() => {
+            setShowAuth(false);
+            setAuthError('');
+          })
+          .catch((err) => {
+            console.error(err);
+            setAuthError(err instanceof Error ? err.message : 'Authentication failed');
+            setShowAuth(true);
+          });
+        window.history.replaceState(null, '', '/');
+      }
+      return;
+    }
+    // Failure: backend set ?auth_error=<message> on the redirect
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get('auth_error');
+    if (err) {
+      setAuthError(decodeURIComponent(err));
+      setShowAuth(true);
+      window.history.replaceState(null, '', '/');
+    }
+  }, [setTokenFromCallback]);
 
   // ── Load conversation list when user changes ──────────────────────────────
   useEffect(() => {
@@ -134,6 +174,47 @@ export default function App() {
     }
   }, [activeConvId, user]);
 
+  // ── Handle regenerate ──────────────────────────────────────────────────────
+  const handleRegenerate = useCallback(async (msgId: string) => {
+    const idx = messages.findIndex(m => m.id === msgId);
+    if (idx <= 0) return;
+    
+    // Find previous user message
+    let text = '';
+    for (let i = idx - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        text = messages[i].content;
+        break;
+      }
+    }
+    if (!text) return;
+
+    // Remove the message we're regenerating
+    setMessages(prev => prev.slice(0, idx));
+    setIsThinking(true);
+
+    try {
+      const res = await api.chat(text, activeConvId ?? undefined);
+      const assistantMsg: Message = {
+        id: genId(),
+        role: 'assistant',
+        content: res.answer,
+        created_at: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, assistantMsg]);
+    } catch (err: unknown) {
+      const errMsg: Message = {
+        id: genId(),
+        role: 'assistant',
+        content: err instanceof Error ? `Error: ${err.message}` : 'Something went wrong. Please try again.',
+        created_at: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, errMsg]);
+    } finally {
+      setIsThinking(false);
+    }
+  }, [messages, activeConvId]);
+
   // ── Loading ───────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
@@ -153,34 +234,41 @@ export default function App() {
 
   return (
     <div className="app-layout">
+      {isMobileSidebarOpen && (
+        <div className="sidebar-overlay" onClick={() => setIsMobileSidebarOpen(false)} />
+      )}
       <Sidebar
         conversations={conversations}
         activeId={activeConvId}
-        onSelect={handleSelect}
-        onNew={handleNew}
+        onSelect={(id) => { handleSelect(id); setIsMobileSidebarOpen(false); }}
+        onNew={() => { handleNew(); setIsMobileSidebarOpen(false); }}
         onDelete={handleDelete}
-        onSignIn={() => setShowAuth(true)}
+        onSignIn={() => { setAuthError(''); setShowAuth(true); }}
+        isMobileOpen={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
       <div className="main-area">
         {/* Top bar */}
         <div className="topbar">
           <div className="topbar-left">
+            <button className="icon-btn mobile-menu-btn" onClick={() => setIsMobileSidebarOpen(true)} aria-label="Open sidebar">
+              <IconMenu />
+            </button>
             <div className="model-badge">
               <div className="model-dot" />
               GraphMind AI
-              <span className="version-tag">v1.0</span>
             </div>
           </div>
           <div className="topbar-right">
-            <button className="icon-btn" title="Search"><IconSearch /></button>
+            <button className="icon-btn" title="Search" aria-label="Search"><IconSearch /></button>
             {user ? (
               <div className="topbar-avatar" title={user.email}>{initials}</div>
             ) : (
               <button
                 className="icon-btn"
                 style={{ padding: '0 12px', width: 'auto', fontSize: 12, color: 'var(--accent)' }}
-                onClick={() => setShowAuth(true)}
+                onClick={() => { setAuthError(''); setShowAuth(true); }}
               >
                 Sign In
               </button>
@@ -196,16 +284,14 @@ export default function App() {
               RAG INDEX: SYNCHRONIZED
             </div>
             <span className="status-sep">•</span>
-            <div className="status-item">4,420 WIKI CHUNKS</div>
+            <div className="status-item">4,985 WIKI CHUNKS</div>
           </div>
           <div className="status-right">
-            <div className="status-item">
-              <a href="https://wiki.metakgp.org" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
-                wiki.metakgp.org
-              </a>
-            </div>
+            <a href="https://wiki.metakgp.org" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
+              wiki.metakgp.org
+            </a>
             <span className="status-sep">•</span>
-            <div className="status-item">MODEL: gemini-2.5-flash ● ACTIVE</div>
+            <div className="status-item">MODEL: gemini-3.5-flash ● ACTIVE</div>
           </div>
         </div>
 
@@ -213,20 +299,33 @@ export default function App() {
         <div className="chat-viewport">
           <div className="chat-inner">
             {messages.length === 0 && !isThinking ? (
-              <WelcomeScreen onSuggest={handleSend} />
+              <WelcomeScreen onSuggest={(text) => setInputValue(text)} />
             ) : (
-              <MessageList messages={messages} isThinking={isThinking} />
+              <MessageList messages={messages} isThinking={isThinking} onRegenerate={handleRegenerate} />
             )}
             <div ref={bottomRef} />
           </div>
         </div>
 
         {/* Input */}
-        <MessageInput onSend={handleSend} disabled={isThinking} />
+        <MessageInput 
+          value={inputValue}
+          onChange={setInputValue}
+          onSend={handleSend} 
+          disabled={isThinking} 
+        />
       </div>
 
       {/* Auth modal */}
-      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+      {showAuth && (
+        <AuthModal
+          onClose={() => {
+            setShowAuth(false);
+            setAuthError('');
+          }}
+          initialError={authError}
+        />
+      )}
     </div>
   );
 }
