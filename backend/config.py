@@ -5,22 +5,34 @@ Central application configuration loaded from environment variables.
 """
 
 import os
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
 
+logger = logging.getLogger("backend.config")
+
 # ── Database ──────────────────────────────────────────────────────────────────
-# Explicitly use psycopg2 driver (SQLAlchemy 2.x defaults to psycopg3 otherwise)
-_raw_db_url = os.getenv(
-    "DATABASE_URL",
-    "postgresql://graphmind:graphmind@localhost:5432/graphmind"
-)
-# Normalise Railway/Render style postgres:// → postgresql+psycopg2://
-if _raw_db_url.startswith("postgres://"):
-    _raw_db_url = _raw_db_url.replace("postgres://", "postgresql+psycopg2://", 1)
-elif _raw_db_url.startswith("postgresql://") and "+" not in _raw_db_url.split("://")[0]:
-    _raw_db_url = _raw_db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
-DATABASE_URL: str = _raw_db_url
+def get_database_url() -> str:
+    """Return normalized database URL from environment variable.
+
+    - Reads dynamically from DATABASE_URL.
+    - Replaces 'postgres://' with 'postgresql://' for SQLAlchemy 1.4+ / 2.0+ compatibility.
+    - Defaults to localhost only when DATABASE_URL is not set.
+    """
+    url = os.getenv("DATABASE_URL", "").strip()
+    if not url:
+        logger.warning(
+            "DATABASE_URL is not set! Defaulting to local PostgreSQL: "
+            "postgresql://graphmind:graphmind@localhost:5432/graphmind"
+        )
+        url = "postgresql://graphmind:graphmind@localhost:5432/graphmind"
+    elif url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    return url
+
+
+DATABASE_URL: str = get_database_url()
 
 # ── JWT Auth ──────────────────────────────────────────────────────────────────
 SECRET_KEY: str = os.getenv("SECRET_KEY", "change-me-in-production-please")

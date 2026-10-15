@@ -7,9 +7,15 @@ SQLAlchemy engine, session factory, and Base class.
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-from backend.config import DATABASE_URL
+from backend.config import get_database_url
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+
+def create_db_engine():
+    """Create and return a new SQLAlchemy engine using the dynamic database URL."""
+    return create_engine(get_database_url(), pool_pre_ping=True)
+
+
+engine = create_db_engine()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

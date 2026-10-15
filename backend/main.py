@@ -16,12 +16,53 @@ from backend.database import engine, Base
 from backend.routers import auth_router, conversations_router, chat_router
 
 import os
+import time
+import logging
+from contextlib import asynccontextmanager
 
-# ── Create all tables on startup (safe to run multiple times) ─────────────────
-Base.metadata.create_all(bind=engine)
+logger = logging.getLogger("backend")
 
 # Detect production environment (set PRODUCTION=true on Railway)
 IS_PRODUCTION = os.getenv("PRODUCTION", "false").strip().lower() in ("true", "1")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPI lifespan handler: manages startup and shutdown events.
+
+    Executes database table verification and creation safely inside the application
+    lifecycle instead of during module import, with retry logic for container environments.
+    """
+    logger.info("Application starting up...")
+
+    # Ensure models are imported and registered with Base metadata
+    import backend.models  # noqa: F401
+
+    max_retries = 5
+    retry_delay = 2  # seconds
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.info(
+                f"Verifying and creating database tables (attempt {attempt}/{max_retries})..."
+            )
+            Base.metadata.create_all(bind=engine)
+            logger.info("Database tables initialized successfully.")
+            break
+        except Exception as exc:
+            logger.warning(
+                f"Database connection attempt {attempt} failed: {exc}. "
+                + (f"Retrying in {retry_delay}s..." if attempt < max_retries else "")
+            )
+            if attempt < max_retries:
+                time.sleep(retry_delay)
+            else:
+                logger.error("Failed to connect to database after maximum attempts.")
+                raise exc
+
+    yield
+    logger.info("Application shutting down...")
+
 
 app = FastAPI(
     title="GraphMind API",
@@ -30,6 +71,7 @@ app = FastAPI(
         "Supports multi-turn conversations, user accounts, and conversation history."
     ),
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Session middleware needed by Authlib's OAuth flow

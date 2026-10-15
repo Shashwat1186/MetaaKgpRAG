@@ -49,7 +49,7 @@ SQL_COMMANDS = [
 ]
 
 CORRECT_DATABASE_URL = (
-    f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@localhost:5432/{DB_NAME}"
+    f"postgresql://{DB_USER}:{DB_PASSWORD}@localhost:5432/{DB_NAME}"
 )
 
 
