@@ -21,6 +21,7 @@ import logging
 from contextlib import asynccontextmanager
 
 logger = logging.getLogger("backend")
+db_connected: bool = False
 
 # Detect production environment (set PRODUCTION=true on Railway)
 IS_PRODUCTION = os.getenv("PRODUCTION", "false").strip().lower() in ("true", "1")
@@ -38,6 +39,8 @@ async def lifespan(app: FastAPI):
     # Ensure models are imported and registered with Base metadata
     import backend.models  # noqa: F401
 
+    global db_connected
+    db_connected = False
     max_retries = 5
     retry_delay = 2  # seconds
 
@@ -48,6 +51,7 @@ async def lifespan(app: FastAPI):
             )
             Base.metadata.create_all(bind=engine)
             logger.info("Database tables initialized successfully.")
+            db_connected = True
             break
         except Exception as exc:
             logger.warning(
@@ -57,8 +61,12 @@ async def lifespan(app: FastAPI):
             if attempt < max_retries:
                 time.sleep(retry_delay)
             else:
-                logger.error("Failed to connect to database after maximum attempts.")
-                raise exc
+                logger.error(
+                    "DATABASE CONNECTION FAILED: "
+                    f"{exc}\n"
+                    "--> NOTE: The server will still start so health checks pass, "
+                    "but database features require setting DATABASE_URL correctly in Railway."
+                )
 
     yield
     logger.info("Application shutting down...")
@@ -114,4 +122,8 @@ app.include_router(chat_router.router)
 
 @app.get("/", tags=["health"])
 def health():
-    return {"status": "ok", "service": "GraphMind API"}
+    return {
+        "status": "ok" if db_connected else "degraded",
+        "service": "GraphMind API",
+        "database": "connected" if db_connected else "disconnected",
+    }
