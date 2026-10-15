@@ -1,0 +1,60 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: graphmind-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-graphmind}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-graphmind}
+      POSTGRES_DB: ${POSTGRES_DB:-graphmind}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-graphmind} -d ${POSTGRES_DB:-graphmind}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - graphmind-net
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: graphmind-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-graphmind}:${POSTGRES_PASSWORD:-graphmind}@db:5432/${POSTGRES_DB:-graphmind}
+      SECRET_KEY: ${SECRET_KEY:-default_secret_key_change_in_production}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      LLM_MODEL: ${LLM_MODEL:-gemini-3.5-flash}
+      ENABLE_MOE: ${ENABLE_MOE:-false}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      PRODUCTION: ${PRODUCTION:-false}
+      PORT: 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/chroma_db:/app/data/chroma_db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - graphmind-net
+
+volumes:
+  pgdata:
+    driver: local
+
+networks:
+  graphmind-net:
+    driver: bridge
