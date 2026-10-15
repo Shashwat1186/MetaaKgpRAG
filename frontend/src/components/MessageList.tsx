@@ -40,7 +40,7 @@ function AssistantMessageBubble({ msg, onRegenerate, isLatest }: { msg: Message,
     setDisplayedContent('');
     let i = 0;
     const interval = setInterval(() => {
-      setDisplayedContent(prev => {
+      setDisplayedContent(() => {
         const next = msg.content.slice(0, i + 3);
         i += 3;
         if (i >= msg.content.length) clearInterval(interval);
