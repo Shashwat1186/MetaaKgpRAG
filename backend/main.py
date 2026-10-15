@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from backend.config import SECRET_KEY, FRONTEND_URL
-from backend.database import engine, Base
+from backend.database import engine, Base, db_url_configured
 from backend.routers import auth_router, conversations_router, chat_router
 
 import os
@@ -41,32 +41,39 @@ async def lifespan(app: FastAPI):
 
     global db_connected
     db_connected = False
-    max_retries = 5
-    retry_delay = 2  # seconds
 
-    for attempt in range(1, max_retries + 1):
-        try:
-            logger.info(
-                f"Verifying and creating database tables (attempt {attempt}/{max_retries})..."
-            )
-            Base.metadata.create_all(bind=engine)
-            logger.info("Database tables initialized successfully.")
-            db_connected = True
-            break
-        except Exception as exc:
-            logger.warning(
-                f"Database connection attempt {attempt} failed: {exc}. "
-                + (f"Retrying in {retry_delay}s..." if attempt < max_retries else "")
-            )
-            if attempt < max_retries:
-                time.sleep(retry_delay)
-            else:
-                logger.error(
-                    "DATABASE CONNECTION FAILED: "
-                    f"{exc}\n"
-                    "--> NOTE: The server will still start so health checks pass, "
-                    "but database features require setting DATABASE_URL correctly in Railway."
+    if not db_url_configured:
+        logger.error(
+            "DATABASE STARTUP WARNING: DATABASE_URL is missing, empty, or invalid. "
+            "Skipping table creation. Please configure a valid PostgreSQL connection URL in Railway."
+        )
+    else:
+        max_retries = 5
+        retry_delay = 2  # seconds
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(
+                    f"Verifying and creating database tables (attempt {attempt}/{max_retries})..."
                 )
+                Base.metadata.create_all(bind=engine)
+                logger.info("Database tables initialized successfully.")
+                db_connected = True
+                break
+            except Exception as exc:
+                logger.warning(
+                    f"Database connection attempt {attempt} failed: {exc}. "
+                    + (f"Retrying in {retry_delay}s..." if attempt < max_retries else "")
+                )
+                if attempt < max_retries:
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(
+                        "DATABASE CONNECTION FAILED: "
+                        f"{exc}\n"
+                        "--> NOTE: The server will still start so health checks pass, "
+                        "but database features require setting DATABASE_URL correctly in Railway."
+                    )
 
     yield
     logger.info("Application shutting down...")

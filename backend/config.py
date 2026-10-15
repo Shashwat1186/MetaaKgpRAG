@@ -54,8 +54,13 @@ def get_database_url() -> str:
         )
         url = "postgresql://graphmind:graphmind@localhost:5432/graphmind"
 
+    # Normalize dialect schemes
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
+    elif url and not (url.startswith("postgresql://") or url.startswith("sqlite://")):
+        if "@" in url:
+            url = f"postgresql://{url}"
+            logger.info("Automatically added postgresql:// scheme to DATABASE_URL.")
 
     return url
 
