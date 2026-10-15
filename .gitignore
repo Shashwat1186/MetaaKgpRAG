@@ -48,6 +48,7 @@ data/clean/
 !**/tsconfig*.json
 !**/.oxlintrc.json
 !railway.json
+!railpack.json
 !frontend/vercel.json
 
 # =============================================================================

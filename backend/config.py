@@ -27,9 +27,14 @@ def get_database_url() -> str:
     # Detect if user left the literal template placeholder from .env.example
     is_placeholder = bool(url and ("@host:" in url or "user:password@host" in url))
 
-    # Check for Railway / cloud individual connection variables as fallbacks
+    # Check for Railway / cloud individual connection variables or alternate URL variables as fallbacks
+    alt_url = os.getenv("DATABASE_PRIVATE_URL") or os.getenv("DATABASE_PUBLIC_URL") or os.getenv("POSTGRESQL_URL")
     pghost = os.getenv("POSTGRES_HOST") or os.getenv("PGHOST")
-    if pghost and (not url or is_placeholder):
+
+    if alt_url and (not url or is_placeholder):
+        url = alt_url
+        logger.info("Using Railway alternate database URL variable.")
+    elif pghost and (not url or is_placeholder):
         pguser = os.getenv("POSTGRES_USER") or os.getenv("PGUSER", "postgres")
         pgpassword = os.getenv("POSTGRES_PASSWORD") or os.getenv("PGPASSWORD", "")
         pgport = os.getenv("POSTGRES_PORT") or os.getenv("PGPORT", "5432")
