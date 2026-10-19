@@ -45,6 +45,7 @@ data/clean/
 *.json
 !config/*.json
 !**/package.json
+!**/package-lock.json
 !**/tsconfig*.json
 !**/.oxlintrc.json
 !railway.json

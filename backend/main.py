@@ -128,6 +128,7 @@ app.include_router(chat_router.router)
 
 
 @app.get("/", tags=["health"])
+@app.get("/health", tags=["health"])
 def health():
     return {
         "status": "ok" if db_connected else "degraded",

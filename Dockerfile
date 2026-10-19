@@ -46,6 +46,11 @@ COPY --from=builder /opt/venv /opt/venv
 RUN groupadd -g 10001 appgroup && \
     useradd -u 10001 -g appgroup -s /bin/bash -m appuser
 
+# Pre-create data directories with correct ownership so appuser can write to them
+# (data/ is excluded from build context; mount a Railway Volume at /app/data)
+RUN mkdir -p /app/data/raw /app/data/processed /app/data/chroma_db && \
+    chown -R appuser:appgroup /app/data
+
 # Copy application code with non-root ownership
 COPY --chown=appuser:appgroup backend/ ./backend/
 COPY --chown=appuser:appgroup config/ ./config/
@@ -67,4 +72,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 
 # Launch uvicorn with exec to guarantee proper POSIX signal propagation
 # Also ensure data subdirectories exist (populated via Railway Volume + ingest script)
-CMD ["sh", "-c", "mkdir -p /app/data/raw /app/data/processed /app/data/chroma_db && exec uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
+CMD ["sh", "-c", "exec uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
