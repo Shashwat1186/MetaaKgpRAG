@@ -37,6 +37,7 @@ pip-wheel-metadata/
 # =============================================================================
 data/raw/
 data/clean/
+data/processed/
 # data/chroma_db is tracked — needed for deployment (Railway/Railway won't have disk access to rebuild it)
 # data/chroma_db/
 *.pkl
