@@ -21,12 +21,18 @@ const IconMenu = () => (
   </svg>
 );
 
+const IconLogOut = () => (
+  <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
 function genId() {
   return Math.random().toString(36).slice(2);
 }
 
 export default function App() {
-  const { user, isLoading, setTokenFromCallback } = useAuth();
+  const { user, isLoading, setTokenFromCallback, signout } = useAuth();
 
   // ── State ────────────────────────────────────────────────────────────────
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -37,8 +43,21 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [inputValue, setInputValue] = useState('');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [showTopUserMenu, setShowTopUserMenu] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const topUserMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showTopUserMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (topUserMenuRef.current && !topUserMenuRef.current.contains(e.target as Node)) {
+        setShowTopUserMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showTopUserMenu]);
 
   // ── Handle Google OAuth redirect: picks up #token=... or ?auth_error=... ────
   useEffect(() => {
@@ -263,7 +282,37 @@ export default function App() {
           <div className="topbar-right">
             <button className="icon-btn" title="Search" aria-label="Search"><IconSearch /></button>
             {user ? (
-              <div className="topbar-avatar" title={user.email}>{initials}</div>
+              <div style={{ position: 'relative' }} ref={topUserMenuRef}>
+                <button
+                  type="button"
+                  className="topbar-avatar-btn"
+                  onClick={() => setShowTopUserMenu((v) => !v)}
+                  title={user.email}
+                  aria-label="Account menu"
+                >
+                  <div className="topbar-avatar">{initials}</div>
+                </button>
+                {showTopUserMenu && (
+                  <div className="topbar-user-menu" role="menu">
+                    <div className="user-menu-header">
+                      <div className="user-menu-name">{user.name || 'User'}</div>
+                      <div className="user-menu-email">{user.email}</div>
+                    </div>
+                    <div className="user-menu-divider" />
+                    <button
+                      className="user-menu-item user-menu-signout"
+                      onClick={() => {
+                        setShowTopUserMenu(false);
+                        signout();
+                      }}
+                      type="button"
+                    >
+                      <IconLogOut />
+                      <span>Sign out</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               <button
                 className="icon-btn"

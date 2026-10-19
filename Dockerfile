@@ -56,8 +56,8 @@ COPY --chown=appuser:appgroup backend/ ./backend/
 COPY --chown=appuser:appgroup config/ ./config/
 COPY --chown=appuser:appgroup rag/ ./rag/
 COPY --chown=appuser:appgroup scraper/ ./scraper/
-# data/ is excluded from Docker build context (.dockerignore)
-# Mount a Railway Volume at /app/data and re-run the ingest script to populate it.
+COPY --chown=appuser:appgroup data/chroma_db/ ./data/chroma_db/
+COPY --chown=appuser:appgroup data/metakgp_graph.gpickle ./data/metakgp_graph.gpickle
 COPY --chown=appuser:appgroup main.py .
 
 # Switch to non-root user

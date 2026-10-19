@@ -124,7 +124,7 @@ async def google_login(request: Request):
 
 @router.get("/google/callback")
 async def google_callback(request: Request, db: Session = Depends(get_db)):
-    target_frontend = FRONTEND_URL
+    target_frontend = (FRONTEND_URL or "").rstrip("/")
     if request.url.hostname == "localhost" and "127.0.0.1" in target_frontend:
         target_frontend = target_frontend.replace("127.0.0.1", "localhost")
     elif request.url.hostname == "127.0.0.1" and "localhost" in target_frontend:
