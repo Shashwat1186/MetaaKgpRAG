@@ -12,3 +12,5 @@ __pycache__
 .pytest_cache
 node_modules
 frontend
+# Exclude large RAG data files - mount as Railway Volume and re-ingest on Railway
+data/

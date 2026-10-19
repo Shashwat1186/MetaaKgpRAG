@@ -51,7 +51,8 @@ COPY --chown=appuser:appgroup backend/ ./backend/
 COPY --chown=appuser:appgroup config/ ./config/
 COPY --chown=appuser:appgroup rag/ ./rag/
 COPY --chown=appuser:appgroup scraper/ ./scraper/
-COPY --chown=appuser:appgroup data/ ./data/
+# data/ is excluded from Docker build context (.dockerignore)
+# Mount a Railway Volume at /app/data and re-run the ingest script to populate it.
 COPY --chown=appuser:appgroup main.py .
 
 # Switch to non-root user
@@ -65,4 +66,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8000}/ || exit 1
 
 # Launch uvicorn with exec to guarantee proper POSIX signal propagation
-CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
+# Also ensure data subdirectories exist (populated via Railway Volume + ingest script)
+CMD ["sh", "-c", "mkdir -p /app/data/raw /app/data/processed /app/data/chroma_db && exec uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
