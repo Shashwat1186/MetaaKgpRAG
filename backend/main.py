@@ -23,7 +23,7 @@ from contextlib import asynccontextmanager
 logger = logging.getLogger("backend")
 db_connected: bool = False
 
-# Detect production environment (set PRODUCTION=true on Railway)
+# Detect production environment (set PRODUCTION=true on Railway/Render)
 IS_PRODUCTION = os.getenv("PRODUCTION", "false").strip().lower() in ("true", "1")
 
 
@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
     if not db_url_configured:
         logger.error(
             "DATABASE STARTUP WARNING: DATABASE_URL is missing, empty, or invalid. "
-            "Skipping table creation. Please configure a valid PostgreSQL connection URL in Railway."
+            "Skipping table creation. Please configure a valid PostgreSQL connection URL."
         )
     else:
         max_retries = 5
@@ -72,8 +72,17 @@ async def lifespan(app: FastAPI):
                         "DATABASE CONNECTION FAILED: "
                         f"{exc}\n"
                         "--> NOTE: The server will still start so health checks pass, "
-                        "but database features require setting DATABASE_URL correctly in Railway."
+                        "but database features require setting DATABASE_URL correctly."
                     )
+
+    # Pre-warm GraphRAG retriever (lightweight ONNX model, ~30MB RAM)
+    try:
+        from backend.rag_service import rag_service
+        logger.info("Pre-warming GraphRAG retriever...")
+        rag_service._initialize()
+        logger.info("GraphRAG retriever pre-warmed successfully.")
+    except Exception as exc:
+        logger.warning(f"RAG service warmup notice (will load on first request): {exc}")
 
     yield
     logger.info("Application shutting down...")
@@ -92,7 +101,7 @@ app = FastAPI(
 # Session middleware needed by Authlib's OAuth flow
 # same_site="lax" allows the session cookie to be sent on top-level GET redirects
 # (which is exactly what happens on the OAuth callback).
-# https_only must be True in production (Railway serves HTTPS) but False for local http:// dev.
+# https_only must be True in production (serves HTTPS) but False for local http:// dev.
 app.add_middleware(
     SessionMiddleware,
     secret_key=SECRET_KEY,

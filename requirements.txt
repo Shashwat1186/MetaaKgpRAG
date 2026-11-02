@@ -1,16 +1,16 @@
-# ── Existing RAG dependencies ─────────────────────────────────────────────────
+# ── Core RAG dependencies (Lightweight ONNX, No PyTorch/CUDA) ─────────────────
 beautifulsoup4>=4.12
 mwparserfromhell>=0.6
 requests>=2.31
 chromadb>=0.4.24
-sentence-transformers>=2.2.2
+onnxruntime>=1.16.0
 networkx>=3.0
 langchain>=0.1.0
 langchain-core>=0.1.0
 langchain-google-genai>=1.0.0
 python-dotenv>=1.0.0
 
-# ── New: Web API + Auth + Database ───────────────────────────────────────────
+# ── Web API + Auth + Database ────────────────────────────────────────────────
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
 sqlalchemy>=2.0.0
@@ -26,7 +26,6 @@ starlette>=0.27.0
 pydantic[email]>=2.0.0
 langgraph>=0.0.20
 itsdangerous>=2.1.2
-
 
 # ── Hugging Face Spaces SDK ──────────────────────────────────────────────────
 gradio>=4.0.0
