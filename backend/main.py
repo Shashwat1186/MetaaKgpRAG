@@ -107,6 +107,7 @@ _allowed_origins = [
     "http://127.0.0.1:5173",      # Vite dev server (127.0.0.1)
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://graphmind-frontend.vercel.app",
 ]
 # Add production frontend URL (from env, e.g. https://metakgprag.vercel.app)
 if FRONTEND_URL and FRONTEND_URL not in _allowed_origins:

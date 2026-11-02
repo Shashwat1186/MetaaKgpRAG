@@ -125,3 +125,4 @@ temp_error.txt
 analyze_chunks.py
 setup_db.py
 ingest.py
+.neon
