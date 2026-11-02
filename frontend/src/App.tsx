@@ -59,6 +59,14 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showTopUserMenu]);
 
+  // ── Auto-open Auth modal on /auth, /login, /signin, /signup ───────────────
+  useEffect(() => {
+    const path = window.location.pathname.toLowerCase();
+    if (['/auth', '/login', '/signin', '/signup'].some((p) => path.startsWith(p))) {
+      setShowAuth(true);
+    }
+  }, []);
+
   // ── Handle Google OAuth redirect: picks up #token=... or ?auth_error=... ────
   useEffect(() => {
     // Success: backend set #token=<jwt> on the redirect

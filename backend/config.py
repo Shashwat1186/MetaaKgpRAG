@@ -21,38 +21,56 @@ logger = logging.getLogger("backend.config")
 def get_database_url() -> str:
     """Return normalized database URL from environment variable.
 
-    - Reads dynamically from DATABASE_URL.
-    - If DATABASE_URL is unset or contains the template placeholder '@host:',
-      attempts to construct it from individual POSTGRES_* or PG* environment variables.
+    - Reads dynamically from DATABASE_URL (stripping extra quotes or whitespace).
+    - If DATABASE_URL is unset, checks cloud and fallback variables.
     - Replaces 'postgres://' with 'postgresql://' for SQLAlchemy 1.4+ / 2.0+ compatibility.
-    - Defaults to localhost only when no database configuration is present.
+    - In cloud environments (Hugging Face / production), returns empty string instead of
+      hanging on localhost:5432.
     """
-    url = os.getenv("DATABASE_URL", "").strip()
+    url = (
+        os.getenv("DATABASE_URL")
+        or os.getenv("database_url")
+        or os.getenv("DATABASE_PUBLIC_URL")
+        or os.getenv("DATABASE_PRIVATE_URL")
+        or os.getenv("POSTGRESQL_URL")
+        or ""
+    ).strip().strip('"').strip("'")
 
     # Detect if user left the literal template placeholder from .env.example
     is_placeholder = bool(url and ("@host:" in url or "user:password@host" in url))
 
-    # Check for Railway / cloud individual connection variables or alternate URL variables as fallbacks
+    # Check for cloud individual connection variables as fallbacks
     alt_url = os.getenv("DATABASE_PRIVATE_URL") or os.getenv("DATABASE_PUBLIC_URL") or os.getenv("POSTGRESQL_URL")
     pghost = os.getenv("POSTGRES_HOST") or os.getenv("PGHOST")
 
     if alt_url and (not url or is_placeholder):
-        url = alt_url
-        logger.info("Using Railway alternate database URL variable.")
+        url = alt_url.strip().strip('"').strip("'")
+        logger.info("Using alternate database URL variable.")
     elif pghost and (not url or is_placeholder):
         pguser = os.getenv("POSTGRES_USER") or os.getenv("PGUSER", "postgres")
         pgpassword = os.getenv("POSTGRES_PASSWORD") or os.getenv("PGPASSWORD", "")
         pgport = os.getenv("POSTGRES_PORT") or os.getenv("PGPORT", "5432")
-        pgdb = os.getenv("POSTGRES_DB") or os.getenv("PGDATABASE", "railway")
+        pgdb = os.getenv("POSTGRES_DB") or os.getenv("PGDATABASE", "neondb")
         auth = f"{pguser}:{pgpassword}@" if pgpassword else f"{pguser}@"
         url = f"postgresql://{auth}{pghost}:{pgport}/{pgdb}"
-        logger.info("Constructed DATABASE_URL from Railway PostgreSQL environment variables.")
+        logger.info("Constructed DATABASE_URL from PostgreSQL environment variables.")
     elif is_placeholder:
         logger.error(
             "CONFIGURATION ERROR: DATABASE_URL contains placeholder hostname 'host'. "
-            "Please set DATABASE_URL in your Railway service variables to your real PostgreSQL connection URL!"
+            "Please configure your valid Neon PostgreSQL connection string in Settings > Variables and secrets."
         )
     elif not url:
+        is_cloud = bool(
+            os.getenv("SPACE_ID")
+            or os.getenv("PRODUCTION", "").strip().lower() in ("true", "1")
+            or os.getenv("RAILWAY_ENVIRONMENT")
+        )
+        if is_cloud:
+            logger.error(
+                "DATABASE_URL is not set in cloud environment! "
+                "Please configure DATABASE_URL in Hugging Face Space Settings > Variables and secrets."
+            )
+            return ""
         logger.warning(
             "DATABASE_URL is not set! Defaulting to local PostgreSQL: "
             "postgresql://graphmind:graphmind@localhost:5432/graphmind"

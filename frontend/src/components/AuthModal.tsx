@@ -8,7 +8,12 @@ interface Props {
 
 export default function AuthModal({ onClose, initialError }: Props) {
   const { signin, signup } = useAuth();
-  const [tab, setTab] = useState<'signin' | 'signup'>('signin');
+  const [tab, setTab] = useState<'signin' | 'signup'>(() => {
+    if (typeof window !== 'undefined' && window.location.pathname.toLowerCase().includes('signup')) {
+      return 'signup';
+    }
+    return 'signin';
+  });
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
