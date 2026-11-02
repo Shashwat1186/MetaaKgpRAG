@@ -1,4 +1,28 @@
-const BASE_URL = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' ? 'http://127.0.0.1:8000' : 'http://localhost:8000');
+function getBaseUrl(): string {
+  // If explicitly configured in VITE_API_URL, use it (strip any trailing slashes)
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+    return envUrl.trim().replace(/\/+$/, '');
+  }
+
+  // Browser-based intelligent fallback
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    // Local development
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return window.location.port === '8000' ? '' : 'http://localhost:8000';
+    }
+    // If hosted directly on Render (same domain as backend)
+    if (hostname.endsWith('onrender.com')) {
+      return '';
+    }
+  }
+
+  // Production fallback for Vercel/external domains when VITE_API_URL is unset
+  return 'https://metaakgprag.onrender.com';
+}
+
+const BASE_URL = getBaseUrl();
 
 function getToken(): string | null {
   return localStorage.getItem('gm_token');
@@ -12,13 +36,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const targetUrl = `${BASE_URL}${cleanPath}`;
+
   let res: Response;
   try {
-    res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+    res = await fetch(targetUrl, { ...options, headers });
   } catch (networkErr) {
-    // fetch() itself threw — server is unreachable
+    // fetch() itself threw — server is unreachable or CORS preflight rejected
     throw new Error(
-      'Cannot reach the server. Make sure the backend is running on ' + BASE_URL
+      `Cannot reach the backend server at ${targetUrl}. Please ensure the backend is running and CORS is configured.`
     );
   }
 
@@ -26,10 +53,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
     // FastAPI validation errors come as { detail: [{msg, loc, type}] }
     let message: string;
-    if (Array.isArray(body.detail)) {
+    if (Array.isArray(body?.detail)) {
       message = body.detail.map((d: { msg: string }) => d.msg).join(', ');
+    } else if (body?.detail) {
+      message = body.detail;
+    } else if (res.status === 404) {
+      message = `Backend endpoint not found (404) at ${targetUrl}. Please check VITE_API_URL in your frontend deployment settings.`;
     } else {
-      message = body.detail || `Request failed (${res.status})`;
+      message = `Request failed with status ${res.status}`;
     }
     throw new Error(message);
   }

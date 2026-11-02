@@ -2,7 +2,7 @@ services:
   - type: web
     name: graphmind-backend
     runtime: python
-    buildCommand: pip install -r requirements.txt && python -c "from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2; ONNXMiniLM_L6_V2()._download_model_if_not_exists()"
+    buildCommand: pip install -r requirements.txt && python -c "from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2; ONNXMiniLM_L6_V2()._download_model_if_not_exists()" && cd frontend && npm install && npm run build && cd ..
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     plan: free
     region: singapore

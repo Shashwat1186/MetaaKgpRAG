@@ -42,42 +42,25 @@ try:
 except ImportError:
     _HAS_ONNX = False
 
-try:
-    from sentence_transformers import SentenceTransformer
-    _HAS_ST = True
-except ImportError:
-    _HAS_ST = False
-
 
 class GraphRAGRetriever:
     def __init__(self):
-        # 1. Initialize lightweight ONNX embedding function (<50MB RAM) to run within Render's 512MB limit
+        # 1. Initialize lightweight ONNX embedding function (<50MB RAM)
         if _HAS_ONNX:
             try:
                 self._onnx_ef = ONNXMiniLM_L6_V2()
             except Exception as e:
                 print(f"[Retriever] ONNX embedding init notice: {e}")
 
-        # 2. Local fallback if SentenceTransformer is installed
-        if _HAS_ST:
-            try:
-                self._st_model = SentenceTransformer(EMBEDDING_MODEL)
-            except Exception as e:
-                print(f"[Retriever] SentenceTransformer fallback not loaded: {e}")
-
-        if not hasattr(self, "_onnx_ef") and not hasattr(self, "_st_model"):
-            raise RuntimeError(
-                "No embedding backend found. Please ensure chromadb or sentence_transformers is installed."
-            )
-
+        # 2. Connect to ChromaDB
         print(f"[Retriever] Connecting to ChromaDB at {CHROMA_DB_DIR}...")
         self.client = chromadb.PersistentClient(path=str(CHROMA_DB_DIR))
-        # Use get_or_create so the server starts even before data is ingested
         self.collection = self.client.get_or_create_collection(
             name=COLLECTION_NAME,
             metadata={"hnsw:space": "cosine"},
         )
 
+        # 3. Load Knowledge Graph
         print(f"[Retriever] Loading Knowledge Graph from {GRAPH_PATH}...")
         if GRAPH_PATH.exists():
             with open(GRAPH_PATH, 'rb') as f:
@@ -85,16 +68,6 @@ class GraphRAGRetriever:
         else:
             print(f"[Retriever] WARNING: {GRAPH_PATH} not found. Graph expansion disabled.")
             self.graph = None
-
-    def _has_cached_onnx_model(self) -> bool:
-        if not hasattr(self, "_onnx_ef"):
-            return False
-        model_file = (
-            Path(self._onnx_ef.DOWNLOAD_PATH)
-            / self._onnx_ef.EXTRACTED_FOLDER_NAME
-            / "model.onnx"
-        )
-        return model_file.exists()
 
     def expand_acronyms(self, query: str) -> str:
         """Expand campus acronyms before vector search."""
@@ -105,22 +78,30 @@ class GraphRAGRetriever:
 
     def _encode_query(self, query: str) -> list[float]:
         """Encode a single query string into a 384-dimensional vector."""
-        # Use ONNX if cached on disk or if SentenceTransformer is not installed
-        if hasattr(self, "_onnx_ef") and (self._has_cached_onnx_model() or not hasattr(self, "_st_model")):
+        if hasattr(self, "_onnx_ef"):
             try:
                 embeddings = self._onnx_ef([query])
                 emb = embeddings[0]
                 return emb.tolist() if hasattr(emb, "tolist") else list(emb)
             except Exception as exc:
-                if hasattr(self, "_st_model"):
+                print(f"[Retriever] ONNX encoding notice ({exc}), attempting SentenceTransformer fallback...")
+                try:
+                    from sentence_transformers import SentenceTransformer
+                    if not hasattr(self, "_st_model"):
+                        self._st_model = SentenceTransformer(EMBEDDING_MODEL)
                     emb = self._st_model.encode(query)
                     return emb.tolist() if hasattr(emb, "tolist") else list(emb)
-                raise
-        elif hasattr(self, "_st_model"):
-            emb = self._st_model.encode(query)
-            return emb.tolist() if hasattr(emb, "tolist") else list(emb)
+                except ImportError:
+                    raise RuntimeError(f"ONNX embedding failed ({exc}) and sentence_transformers is not installed.")
         else:
-            raise RuntimeError("No embedding model available to encode query.")
+            try:
+                from sentence_transformers import SentenceTransformer
+                if not hasattr(self, "_st_model"):
+                    self._st_model = SentenceTransformer(EMBEDDING_MODEL)
+                emb = self._st_model.encode(query)
+                return emb.tolist() if hasattr(emb, "tolist") else list(emb)
+            except ImportError:
+                raise RuntimeError("No embedding backend available (ONNXMiniLM_L6_V2 or SentenceTransformer).")
 
     def search(self, query: str, top_k: int = 3, expand_graph: bool = True):
         query = self.expand_acronyms(query)

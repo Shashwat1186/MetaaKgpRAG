@@ -16,8 +16,10 @@ from backend.database import engine, Base, db_url_configured
 from backend.routers import auth_router, conversations_router, chat_router
 
 import os
+import re
 import time
 import logging
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 logger = logging.getLogger("backend")
@@ -98,6 +100,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Normalize duplicate slashes in URL paths (e.g. //chat -> /chat)
+@app.middleware("http")
+async def clean_path_middleware(request, call_next):
+    if "//" in request.scope.get("path", ""):
+        request.scope["path"] = re.sub(r"/+", "/", request.scope["path"])
+    return await call_next(request)
+
 # Session middleware needed by Authlib's OAuth flow
 # same_site="lax" allows the session cookie to be sent on top-level GET redirects
 # (which is exactly what happens on the OAuth callback).
@@ -117,6 +126,7 @@ _allowed_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "https://graphmind-frontend.vercel.app",
+    "https://metaakgprag.onrender.com",
 ]
 # Add production frontend URL (from env, e.g. https://metakgprag.vercel.app)
 if FRONTEND_URL and FRONTEND_URL not in _allowed_origins:
@@ -126,22 +136,48 @@ if FRONTEND_URL and FRONTEND_URL not in _allowed_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
+    allow_origin_regex=r"^https:\/\/.*\.onrender\.com$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(auth_router.router)
-app.include_router(conversations_router.router)
-app.include_router(chat_router.router)
+# ── Routers (mounted at root and /api for versatile frontend compatibility) ──
+for prefix in ["", "/api"]:
+    app.include_router(auth_router.router, prefix=prefix)
+    app.include_router(conversations_router.router, prefix=prefix)
+    app.include_router(chat_router.router, prefix=prefix)
 
 
-@app.get("/", tags=["health"])
-@app.get("/health", tags=["health"])
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["health"])
 def health():
     return {
         "status": "ok" if db_connected else "degraded",
         "service": "GraphMind API",
         "database": "connected" if db_connected else "disconnected",
     }
+
+
+# Check if frontend static files exist (enables single-service Render hosting)
+frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+if frontend_dist.exists() and (frontend_dist / "index.html").exists():
+    from fastapi.staticfiles import StaticFiles
+    from starlette.responses import FileResponse
+
+    if (frontend_dist / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
+
+    @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+    async def serve_root():
+        return FileResponse(frontend_dist / "index.html")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        target = frontend_dist / full_path
+        if full_path and target.exists() and target.is_file():
+            return FileResponse(target)
+        return FileResponse(frontend_dist / "index.html")
+else:
+    @app.api_route("/", methods=["GET", "HEAD"], tags=["health"])
+    def root_health():
+        return health()
