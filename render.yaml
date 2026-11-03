@@ -2,7 +2,7 @@ services:
   - type: web
     name: graphmind-backend
     runtime: python
-    buildCommand: pip install -r requirements.txt && python -c "from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2; ONNXMiniLM_L6_V2()._download_model_if_not_exists()" && cd frontend && npm install && npm run build && cd ..
+    buildCommand: pip install -r requirements.txt && python -c "from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2; ONNXMiniLM_L6_V2()._download_model_if_not_exists()"
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     plan: free
     region: singapore
@@ -18,4 +18,10 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: SECRET_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
         sync: false

@@ -136,7 +136,7 @@ if FRONTEND_URL and FRONTEND_URL not in _allowed_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    allow_origin_regex=r"^https:\/\/.*\.onrender\.com$",
+    allow_origin_regex=r"^https:\/\/.*(vercel\.app|onrender\.com)$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

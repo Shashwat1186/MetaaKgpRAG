@@ -100,9 +100,17 @@ ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
 # ── Google OAuth ──────────────────────────────────────────────────────────────
 GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
-GOOGLE_REDIRECT_URI: str = os.getenv(
-    "GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback"
-)
+
+def get_google_redirect_uri() -> str:
+    explicit = os.getenv("GOOGLE_REDIRECT_URI")
+    if explicit and explicit.strip():
+        return explicit.strip()
+    render_url = os.getenv("RENDER_EXTERNAL_URL")
+    if render_url and render_url.strip():
+        return f"{render_url.strip().rstrip('/')}/auth/google/callback"
+    return "http://localhost:8000/auth/google/callback"
+
+GOOGLE_REDIRECT_URI: str = get_google_redirect_uri()
 
 # ── App ───────────────────────────────────────────────────────────────────────
 FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
